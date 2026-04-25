@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicMap</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f3;
+            --bg-tertiary: #efefed;
+            --text-primary: #1a1a18;
+            --text-secondary: #6b6b67;
+            --text-tertiary: #9b9b96;
+            --border-light: rgba(0, 0, 0, 0.1);
+            --border-mid: rgba(0, 0, 0, 0.18);
+            --border-dark: rgba(0, 0, 0, 0.28);
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --info-bg: #E6F1FB;
+            --info-text: #0C447C;
+            --info-border: #185FA5;
+            --success-bg: #EAF3DE;
+            --success-text: #173404;
+            --success-border: #3B6D11;
+            --danger-bg: #FAECE7;
+            --danger-text: #712B13;
+            --danger-border: #993C1D;
+            --warn-bg: #FAEEDA;
+            --warn-text: #633806;
+            --warn-border: #854F0B;
+            --font: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+        }
+
+        @media(prefers-color-scheme:dark) {
+            :root {
+                --bg-primary: #1e1e1c;
+                --bg-secondary: #252523;
+                --bg-tertiary: #2c2c2a;
+                --text-primary: #e8e6de;
+                --text-secondary: #9b9b96;
+                --text-tertiary: #6b6b67;
+                --border-light: rgba(255, 255, 255, 0.08);
+                --border-mid: rgba(255, 255, 255, 0.15);
+                --border-dark: rgba(255, 255, 255, 0.25);
+            }
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column
+        }
+
+        button {
+            font-family: var(--font);
+            cursor: pointer
+        }
+
+        /* TOOLBAR */
+        #toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: var(--bg-primary);
+            border-bottom: 0.5px solid var(--border-light);
+            flex-shrink: 0;
+            z-index: 20
+        }
+
+        #toolbar h1 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-right: 8px;
+            letter-spacing: -.3px
+        }
+
+        .view-btn {
+            padding: 5px 14px;
+            border: 0.5px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 12px;
+            transition: all .15s
+        }
+
+        .view-btn.active {
+            background: var(--info-bg);
+            color: var(--info-text);
+            border-color: var(--info-border)
+        }
+
+        .metrics {
+            display: flex;
+            gap: 16px;
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--text-secondary)
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px
+        }
+
+        .metric strong {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary)
+        }
+
+        #main {
+            flex: 1;
+            overflow: hidden;
+            position: relative
+        }
+
+        /* MAP VIEW */
+        #map-view {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: row
+        }
+
+        #map-view.active {
+            display: flex
+        }
+
+        #canvas-wrap {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+            background: var(--bg-tertiary)
+        }
+
+        #canvas-wrap.panning {
+            cursor: grabbing
+        }
+
+        #canvas-wrap.pinning {
+            cursor: crosshair
+        }
+
+        svg#map {
+            width: 100%;
+            height: 100%;
+            display: block
+        }
+
+        .zone {
+            fill: none;
+            stroke: var(--border-light);
+            stroke-width: 0.5;
+            stroke-dasharray: 4 3
+        }
+
+        .zone-label {
+            font-size: 10px;
+            fill: var(--text-tertiary);
+            font-family: var(--font)
+        }
+
+        .block {
+            fill: var(--bg-secondary);
+            stroke: var(--border-light);
+            stroke-width: 0.5
+        }
+
+        .pin-icon {
+            cursor: pointer
+        }
+
+        .cluster-badge {
+            font-size: 9px;
+            font-weight: 600
+        }
+
+        /* SIDE PANEL */
+        #side-panel {
+            width: 300px;
+            min-width: 300px;
+            background: var(--bg-primary);
+            border-left: 0.5px solid var(--border-light);
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform .25s cubic-bezier(.4, 0, .2, 1)
+        }
+
+        #side-panel.open {
+            transform: translateX(0)
+        }
+
+        #panel-header {
+            padding: 14px 16px 10px;
+            border-bottom: 0.5px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-shrink: 0
+        }
+
+        #panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 16px
+        }
+
+        .panel-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            line-height: 1;
+            padding: 0 2px
+        }
+
+        .field-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin: 12px 0 4px
+        }
+
+        .field-label:first-child {
+            margin-top: 0
+        }
+
+        input.field,
+        textarea.field {
+            width: 100%;
+            border: 0.5px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 13px;
+            padding: 7px 10px;
+            font-family: var(--font);
+            resize: vertical;
+            outline: none
+        }
+
+        input.field:focus,
+        textarea.field:focus {
+            border-color: var(--info-border)
+        }
+
+        textarea.field {
+            min-height: 80px
+        }
+
+        .chip-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 4px
+        }
+
+        .chip {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            border: 0.5px solid transparent;
+            background: transparent;
+            color: var(--text-secondary);
+            transition: all .12s
+        }
+
+        .upvote-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px
+        }
+
+        .upvote-btn {
+            padding: 5px 14px;
+            border: 0.5px solid var(--border-mid);
+            border-radius: 20px;
+            background: transparent;
+            font-size: 12px;
+            color: var(--text-secondary);
+            transition: all .12s
+        }
+
+        .upvote-btn:hover {
+            background: var(--info-bg);
+            color: var(--info-text)
+        }
+
+        .upvote-count {
+            font-size: 15px;
+            font-weight: 600
+        }
+
+        .resource-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            margin-top: 6px;
+            padding: 7px 10px;
+            border: 0.5px solid var(--border-light);
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary)
+        }
+
+        .resource-item span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--info-text)
+        }
+
+        .res-rm {
+            background: none;
+            border: none;
+            color: var(--text-tertiary);
+            font-size: 12px;
+            padding: 0 2px
+        }
+
+        .add-link-btn {
+            margin-top: 8px;
+            padding: 6px 12px;
+            border: 0.5px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            background: transparent;
+            font-size: 12px;
+            color: var(--text-secondary);
+            width: 100%
+        }
+
+        .save-btn {
+            margin-top: 14px;
+            padding: 8px;
+            border-radius: var(--radius-md);
+            background: var(--info-bg);
+            color: var(--info-text);
+            border: 0.5px solid var(--info-border);
+            font-size: 13px;
+            width: 100%;
+            font-weight: 500
+        }
+
+        .save-btn:hover {
+            opacity: .9
+        }
+
+
+        /* MINIMAP */
+        #minimap {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            width: 140px;
+            height: 88px;
+            background: var(--bg-primary);
+            border: 0.5px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            z-index: 10
+        }
+
+        #minimap svg {
+            width: 100%;
+            height: 100%
+        }
+
+        /* COMPLETION BADGE */
+        #completion-badge {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-primary);
+            border: 0.5px solid var(--border-mid);
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 12px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap
+        }
+
+        <div class="card"><button>Enter</button></div>.progress-bar-wrap {
+            width: 80px;
+            height: 5px;
+            background: var(--border-light);
+            border-radius: 3px;
+            overflow: hidden
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #3B6D11;
+            border-radius: 3px;
+            transition: width .4s
+        }
+
+        /* ADD PIN BUTTON */
+        #add-pin-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 10;
+            padding: 7px 14px;
+            background: var(--bg-primary);
+            border: 0.5px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            color: var(--text-primary);
+            transition: all .15s
+        }
+
+        #add-pin-btn.active {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border-color: var(--danger-border)
+        }
+
+        /* KANBAN VIEW */
+        #kanban-view {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-tertiary)
+        }
+
+        #kanban-view.active {
+            display: flex
+        }
+
+        #kanban-scroll {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 16px
+        }
+
+        #kanban-board {
+            display: flex;
+            gap: 12px;
+            height: 100%;
+            align-items: flex-start;
+            min-width: min-content
+        }
+
+        .k-col {
+            width: 260px;
+            flex-shrink: 0;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            border: 0.5px solid var(--border-light);
+            display: flex;
+            flex-direction: column;
+            max-height: 100%;
+            overflow: hidden
+        }
+
+        .k-col-header {
+            padding: 10px 14px;
+            border-bottom: 0.5px solid var(--border-light);
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0
+        }
+
+        .k-col-count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--bg-primary);
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-weight: 400
+        }
+
+        .k-cards {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .k-card {
+            background: var(--bg-primary);
+            border: 0.5px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            cursor: grab;
+            user-select: none;
+            transition: border-color .15s, transform .15s
+        }
+
+        .k-card:hover {
+            border-color: var(--border-mid)
+        }
+
+        .k-card.dragging {
+            opacity: .55;
+            transform: scale(.97)
+        }
+
+        .k-card.drag-over-top {
+            border-top: 2px solid var(--info-border)
+        }
+
+        .k-card-title {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 5px;
+            line-height: 1.3
+        }
+
+        .k-card-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap
+        }
+
+        .cat-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 500
+        }
+
+        .upvote-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            padding: 2px 7px;
+            border-radius: 10px;
+            border: 0.5px solid var(--border-light);
+            background: transparent;
+            transition: all .12s
+        }
+
+        .upvote-pill:hover {
+            background: var(--info-bg);
+            color: var(--info-text)
+        }
+
+        .k-card-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 5px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4
+        }
+
+        .drop-zone-highlight {
+            background: var(--info-bg) !important;
+            border-color: var(--info-border) !important
+        }
+
+        /* SUBMISSION OVERLAY */
+        #submit-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .4);
+            z-index: 100;
+            display: none;
+            align-items: flex-end;
+            justify-content: center
+        }
+
+        #submit-overlay.open {
+            display: flex
+        }
+
+        #submit-form {
+            background: var(--bg-primary);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            width: 100%;
+            max-width: 500px;
+            padding: 22px 22px 32px;
+            transform: translateY(100%);
+            transition: transform .28s cubic-bezier(.4, 0, .2, 1)
+        }
+
+        #submit-overlay.open #submit-form {
+            transform: translateY(0)
+        }
+
+        #submit-form h2 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px
+        }
+
+        .form-row {
+            margin-bottom: 12px
+        }
+
+        .form-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            display: block
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- TOOLBAR -->
+    <div id="toolbar">
+        <h1>&#127961; CivicMap</h1>
+        <button class="view-btn active" id="btn-map" onclick="switchView('map')">Map view</button>
+        <button class="view-btn" id="btn-kanban" onclick="switchView('kanban')">Kanban view</button>
+        <div class="metrics">
+            <div class="metric"><strong id="m-total">0</strong><span>Issues</span></div>
+            <div class="metric"><strong id="m-resolved">0%</strong><span>Resolved</span></div>
+            <div class="metric"><strong id="m-top-cat">—</strong><span>Top category</span></div>
+            <div class="metric"><strong id="m-hot-zone">—</strong><span>Hot zone</span></div>
+
+        </div>
+    </div>
+
+    <div id="main">
+
+        <!-- MAP VIEW -->
+        <div id="map-view" class="active">
+            <div id="canvas-wrap" onmousedown="canvasMouseDown(event)" onmousemove="canvasMouseMove(event)"
+                onmouseup="canvasMouseUp(event)" onmouseleave="canvasMouseUp(event)" onwheel="canvasWheel(event)">
+                <svg id="map" xmlns="http://www.w3.org/2000/svg">
+                    <g id="map-transform">
+                        <g id="city-base"></g>
+                        <g id="pins-layer"></g>
+                    </g>
+                </svg>
+
+                <div id="completion-badge">
+                    <span id="badge-pct">0%</span> resolved
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" id="prog-fill" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <button id="add-pin-btn" onclick="togglePinMode()">+ Drop pin</button>
+            </div>
+
+            <!-- Side panel -->
+            <div id="side-panel">
+                <div id="panel-header">
+                    <div>
+                        <div id="panel-cat-badge" style="margin-bottom:4px"></div>
+                        <div id="panel-title-display" style="font-size:15px;font-weight:600;line-height:1.3"></div>
+                    </div>
+                    <button class="panel-close" onclick="closePanel()">&#10005;</button>
+                </div>
+                <div id="panel-body">
+                    <div class="field-label">Title</div>
+                    <input class="field" id="p-title" type="text" placeholder="Issue title">
+                    <div class="field-label">Description / Notes</div>
+                    <textarea class="field" id="p-desc" placeholder="Describe the issue in detail..."></textarea>
+                    <div class="field-label">Category</div>
+                    <div class="chip-row" id="p-cat-chips"></div>
+                    <div class="field-label">Status</div>
+                    <div class="chip-row" id="p-status-chips"></div>
+                    <div class="upvote-row">
+                        <button class="upvote-btn" onclick="upvote()">&#9650; Upvote</button>
+                        <span class="upvote-count" id="p-upvotes">0</span>
+                        <span style="font-size:12px;color:var(--text-secondary)">community upvotes</span>
+                    </div>
+                    <div class="field-label">Resources &amp; Links</div>
+                    <div id="p-resources"></div>
+                    <button class="add-link-btn" onclick="addResource()">+ Add resource link</button>
+                    <button class="save-btn" onclick="savePanel()">Save changes</button>
+                </div>
+            </div>
+
+            <!-- Minimap -->
+            <div id="minimap">
+                <svg id="mm-svg" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+                    <g id="mm-content"></g>
+                    <rect id="mm-viewport" fill="none" stroke="#185FA5" stroke-width="5" rx="2" opacity="0.7" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- KANBAN VIEW -->
+        <div id="kanban-view">
+            <div id="kanban-scroll">
+                <div id="kanban-board">
+                    <div class="k-col">
+                        <div class="k-col-header">
+                            <span>&#128229; New</span>
+                            <span class="k-col-count" id="cnt-new">0</span>
+                        </div>
+                        <div class="k-cards" id="cards-new" data-status="new" ondragover="colDragOver(event)"
+                            ondragleave="colDragLeave(event)" ondrop="colDrop(event)"></div>
+                    </div>
+                    <div class="k-col">
+                        <div class="k-col-header">
+                            <span>&#9881; In progress</span>
+                            <span class="k-col-count" id="cnt-inprogress">0</span>
+                        </div>
+                        <div class="k-cards" id="cards-inprogress" data-status="inprogress"
+                            ondragover="colDragOver(event)" ondragleave="colDragLeave(event)" ondrop="colDrop(event)">
+                        </div>
+                    </div>
+                    <div class="k-col">
+                        <div class="k-col-header">
+                            <span>&#10003; Resolved</span>
+                            <span class="k-col-count" id="cnt-resolved">0</span>
+                        </div>
+                        <div class="k-cards" id="cards-resolved" data-status="resolved" ondragover="colDragOver(event)"
+                            ondragleave="colDragLeave(event)" ondrop="colDrop(event)"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submission overlay -->
+    <div id="submit-overlay" onclick="overlayClickOut(event)">
+        <div id="submit-form">
+            <h2>&#128205; Report a civic issue</h2>
+            <div class="form-row">
+                <label class="form-label">Title</label>
+                <input class="field" id="f-title" type="text" placeholder="e.g. Waterlogging near market">
+            </div>
+            <div class="form-row">
+                <label class="form-label">Description</label>
+                <textarea class="field" id="f-desc"
+                    placeholder="What's happening here? How long has it been an issue?"></textarea>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Category</label>
+                <div class="chip-row" id="f-cat-chips"></div>
+            </div>
+            <button class="save-btn" onclick="submitIssue()" style="margin-top:8px">Submit issue</button>
+        </div>
+    </div>
+
+    <script>
+        // ─── CONFIGURATION ───────────────────────────────────────────────────────────
+        const CATS = {
+            infrastructure: { label: 'Infrastructure', color: '#185FA5', bg: '#E6F1FB', text: '#0C447C' },
+            sanitation: { label: 'Sanitation', color: '#0F6E56', bg: '#E1F5EE', text: '#085041' },
+            safety: { label: 'Safety', color: '#993C1D', bg: '#FAECE7', text: '#712B13' },
+            greenery: { label: 'Greenery', color: '#3B6D11', bg: '#EAF3DE', text: '#27500A' }
+        };
+
+        const STATUS_META = [
+            { k: 'new', l: 'New', bg: '#FAECE7', text: '#712B13', border: '#993C1D' },
+            { k: 'inprogress', l: 'In progress', bg: '#FAEEDA', text: '#633806', border: '#854F0B' },
+            { k: 'resolved', l: 'Resolved', bg: '#EAF3DE', text: '#173404', border: '#3B6D11' }
+        ];
+
+        const MAP_W = 800, MAP_H = 500;
+
+        const ZONES = [
+            { id: 'north', label: 'North Zone', x: 0, y: 0, w: 400, h: 250 },
+            { id: 'south', label: 'South Zone', x: 0, y: 250, w: 400, h: 250 },
+            { id: 'east', label: 'East Zone', x: 400, y: 0, w: 400, h: 250 },
+            { id: 'market', label: 'Market Zone', x: 400, y: 250, w: 400, h: 250 }
+        ];
+
+        const BLOCKS = [
+            { x: 20, y: 20, w: 80, h: 60 }, { x: 120, y: 20, w: 100, h: 60 }, { x: 240, y: 20, w: 80, h: 60 }, { x: 340, y: 20, w: 40, h: 60 },
+            { x: 20, y: 100, w: 60, h: 80 }, { x: 100, y: 100, w: 120, h: 80 }, { x: 240, y: 100, w: 60, h: 80 }, { x: 320, y: 100, w: 60, h: 80 },
+            { x: 20, y: 200, w: 80, h: 40 }, { x: 120, y: 200, w: 80, h: 40 }, { x: 220, y: 200, w: 80, h: 40 }, { x: 320, y: 200, w: 60, h: 40 },
+            { x: 20, y: 270, w: 80, h: 80 }, { x: 120, y: 270, w: 100, h: 80 }, { x: 240, y: 270, w: 80, h: 80 },
+            { x: 20, y: 380, w: 80, h: 100 }, { x: 120, y: 380, w: 80, h: 60 }, { x: 240, y: 380, w: 80, h: 60 }, { x: 340, y: 380, w: 40, h: 60 },
+            { x: 420, y: 20, w: 80, h: 60 }, { x: 520, y: 20, w: 100, h: 60 }, { x: 640, y: 20, w: 60, h: 60 }, { x: 720, y: 20, w: 60, h: 60 },
+            { x: 420, y: 100, w: 100, h: 80 }, { x: 540, y: 100, w: 80, h: 80 }, { x: 640, y: 100, w: 80, h: 80 }, { x: 740, y: 100, w: 40, h: 80 },
+            { x: 420, y: 200, w: 60, h: 40 }, { x: 500, y: 200, w: 80, h: 40 }, { x: 600, y: 200, w: 80, h: 40 }, { x: 700, y: 200, w: 80, h: 40 },
+            { x: 420, y: 270, w: 100, h: 80 }, { x: 540, y: 270, w: 80, h: 80 }, { x: 640, y: 270, w: 100, h: 80 },
+            { x: 420, y: 380, w: 80, h: 80 }, { x: 520, y: 380, w: 100, h: 80 }, { x: 640, y: 380, w: 80, h: 80 }, { x: 740, y: 380, w: 40, h: 60 }
+        ];
+
+        // ─── STATE ────────────────────────────────────────────────────────────────────
+        let state = { issues: [], nextId: 1 };
+        try { const s = localStorage.getItem('civicmap_v2'); if (s) state = JSON.parse(s); } catch (e) { }
+
+        let pan = { x: 0, y: 0 }, zoom = 1;
+        let isPanning = false, panStart = { x: 0, y: 0 };
+        let pinMode = false, selectedCatForm = 'infrastructure';
+        let pendingCoord = null, panelIssueId = null, dragCard = null;
+
+        // ─── PERSIST ──────────────────────────────────────────────────────────────────
+        function save() { try { localStorage.setItem('civicmap_v2', JSON.stringify(state)); } catch (e) { } }
+
+        // ─── SVG HELPERS ─────────────────────────────────────────────────────────────
+        function svgEl(tag) { return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        // ─── CITY BASE ────────────────────────────────────────────────────────────────
+        function buildCityBase() {
+            const g = document.getElementById('city-base');
+            ZONES.forEach(z => {
+                const r = svgEl('rect'); r.setAttribute('class', 'zone');
+                r.setAttribute('x', z.x); r.setAttribute('y', z.y);
+                r.setAttribute('width', z.w); r.setAttribute('height', z.h);
+                g.appendChild(r);
+                const t = svgEl('text'); t.setAttribute('class', 'zone-label');
+                t.setAttribute('x', z.x + 8); t.setAttribute('y', z.y + 16);
+                t.textContent = z.label; g.appendChild(t);
+            });
+            BLOCKS.forEach(b => {
+                const r = svgEl('rect'); r.setAttribute('class', 'block');
+                r.setAttribute('x', b.x); r.setAttribute('y', b.y);
+                r.setAttribute('width', b.w); r.setAttribute('height', b.h);
+                r.setAttribute('rx', '3'); g.appendChild(r);
+            });
+        }
+
+        // ─── PINS ─────────────────────────────────────────────────────────────────────
+        function renderPins() {
+            const layer = document.getElementById('pins-layer');
+            layer.innerHTML = '';
+            state.issues.forEach(issue => {
+                const cat = CATS[issue.category] || CATS.infrastructure;
+                const statusColor = { new: '#FAECE7', inprogress: '#FAEEDA', resolved: '#EAF3DE' }[issue.status] || '#fff';
+
+                const g = svgEl('g');
+                g.setAttribute('class', 'pin-icon');
+                g.setAttribute('transform', `translate(${issue.x},${issue.y})`);
+                g.style.cursor = 'pointer';
+                g.onclick = e => { e.stopPropagation(); openPanel(issue.id); };
+
+                // pulse ring
+                const ring = svgEl('circle');
+                ring.setAttribute('r', '14'); ring.setAttribute('fill', cat.bg); ring.setAttribute('opacity', '0.35');
+                g.appendChild(ring);
+
+                // shadow
+                const sh = svgEl('ellipse');
+                sh.setAttribute('cx', '0'); sh.setAttribute('cy', '11');
+                sh.setAttribute('rx', '7'); sh.setAttribute('ry', '3');
+                sh.setAttribute('fill', 'rgba(0,0,0,0.12)');
+                g.appendChild(sh);
+
+                // pin teardrop
+                const body = svgEl('path');
+                body.setAttribute('d', 'M0,-12 C6,-12 10,-7 10,-2 C10,6 0,14 0,14 C0,14 -10,6 -10,-2 C-10,-7 -6,-12 0,-12 Z');
+                body.setAttribute('fill', cat.color);
+                g.appendChild(body);
+
+                // inner circle
+                const inner = svgEl('circle');
+                inner.setAttribute('r', '4'); inner.setAttribute('cy', '-2');
+                inner.setAttribute('fill', 'rgba(255,255,255,0.35)');
+                g.appendChild(inner);
+
+                // status dot
+                const dot = svgEl('circle');
+                dot.setAttribute('r', '3.5'); dot.setAttribute('cx', '7'); dot.setAttribute('cy', '-10');
+                dot.setAttribute('fill', statusColor); dot.setAttribute('stroke', cat.color); dot.setAttribute('stroke-width', '1');
+                g.appendChild(dot);
+
+                // upvote badge
+                if (issue.upvotes > 0) {
+                    const badge = svgEl('text');
+                    badge.setAttribute('x', '-18'); badge.setAttribute('y', '-10');
+                    badge.setAttribute('fill', cat.color); badge.setAttribute('font-size', '9');
+                    badge.setAttribute('font-weight', '600'); badge.setAttribute('font-family', 'system-ui,sans-serif');
+                    badge.textContent = '▲' + issue.upvotes;
+                    g.appendChild(badge);
+                }
+
+                layer.appendChild(g);
+            });
+        }
+
+        // ─── KANBAN ───────────────────────────────────────────────────────────────────
+        function renderKanban() {
+            ['new', 'inprogress', 'resolved'].forEach(s => {
+                const col = document.getElementById('cards-' + s);
+                col.innerHTML = '';
+                const sorted = state.issues.filter(i => i.status === s).sort((a, b) => b.upvotes - a.upvotes);
+                sorted.forEach(issue => renderCard(issue, col));
+                document.getElementById('cnt-' + s).textContent = sorted.length;
+            });
+        }
+
+        function renderCard(issue, container) {
+            const cat = CATS[issue.category] || CATS.infrastructure;
+            const d = document.createElement('div');
+            d.className = 'k-card';
+            d.setAttribute('draggable', 'true');
+            d.dataset.id = issue.id;
+            d.innerHTML = `
+    <div class="k-card-title">${esc(issue.title || 'Untitled')}</div>
+    <div class="k-card-meta">
+      <span class="cat-badge" style="background:${cat.bg};color:${cat.text}">${cat.label}</span>
+      <button class="upvote-pill" onclick="upvoteCard(${issue.id},event)">▲ ${issue.upvotes}</button>
+    </div>
+    ${issue.desc ? `<div class="k-card-desc">${esc(issue.desc)}</div>` : ''}
+  `;
+            d.ondragstart = e => { dragCard = issue.id; setTimeout(() => d.classList.add('dragging'), 0); e.dataTransfer.effectAllowed = 'move'; };
+            d.ondragend = () => { d.classList.remove('dragging'); dragCard = null; document.querySelectorAll('.drop-zone-highlight').forEach(el => el.classList.remove('drop-zone-highlight')); };
+            d.onclick = e => { if (!dragCard) { switchView('map'); setTimeout(() => openPanel(issue.id), 60); } };
+            container.appendChild(d);
+        }
+
+        function colDragOver(e) {
+            e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+            e.currentTarget.classList.add('drop-zone-highlight');
+        }
+        function colDragLeave(e) { e.currentTarget.classList.remove('drop-zone-highlight'); }
+        function colDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drop-zone-highlight');
+            if (!dragCard) return;
+            const newStatus = e.currentTarget.dataset.status;
+            const issue = state.issues.find(i => i.id === dragCard);
+            if (issue && issue.status !== newStatus) { issue.status = newStatus; save(); renderAll(); }
+        }
+
+        function upvoteCard(id, e) {
+            e.stopPropagation();
+            const issue = state.issues.find(i => i.id === id);
+            if (issue) { issue.upvotes++; save(); renderAll(); }
+        }
+
+        // ─── METRICS ─────────────────────────────────────────────────────────────────
+        function updateMetrics() {
+            const total = state.issues.length;
+            const resolved = state.issues.filter(i => i.status === 'resolved').length;
+            const pct = total ? Math.round(resolved / total * 100) : 0;
+            document.getElementById('m-total').textContent = total;
+            document.getElementById('m-resolved').textContent = pct + '%';
+            document.getElementById('badge-pct').textContent = pct + '%';
+            document.getElementById('prog-fill').style.width = pct + '%';
+            // top category
+            const catCounts = {};
+            state.issues.forEach(i => { catCounts[i.category] = (catCounts[i.category] || 0) + 1; });
+            const topCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('m-top-cat').textContent = topCat ? CATS[topCat[0]].label : '—';
+            // hot zone
+            const zoneCounts = {};
+            state.issues.forEach(i => { const z = getZone(i.x, i.y); zoneCounts[z] = (zoneCounts[z] || 0) + 1; });
+            const topZone = Object.entries(zoneCounts).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('m-hot-zone').textContent = topZone ? topZone[0].replace(' Zone', '') : '—';
+        }
+
+        function getZone(x, y) {
+            for (const z of ZONES) { if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) return z.label; }
+            return 'Unknown';
+        }
+
+        // ─── MINIMAP ──────────────────────────────────────────────────────────────────
+        function updateMinimap() {
+            const mm = document.getElementById('mm-content');
+            mm.innerHTML = '';
+            BLOCKS.forEach(b => {
+                const r = svgEl('rect');
+                r.setAttribute('x', b.x); r.setAttribute('y', b.y);
+                r.setAttribute('width', b.w); r.setAttribute('height', b.h);
+                r.setAttribute('fill', 'rgba(128,128,128,0.15)'); r.setAttribute('rx', '1');
+                mm.appendChild(r);
+            });
+            state.issues.forEach(i => {
+                const cat = CATS[i.category] || CATS.infrastructure;
+                const c = svgEl('circle');
+                c.setAttribute('cx', i.x); c.setAttribute('cy', i.y);
+                c.setAttribute('r', '8'); c.setAttribute('fill', cat.color); c.setAttribute('opacity', '0.8');
+                mm.appendChild(c);
+            });
+            const vp = document.getElementById('mm-viewport');
+            const wrap = document.getElementById('canvas-wrap');
+            const tw = wrap.offsetWidth, th = wrap.offsetHeight;
+            vp.setAttribute('x', -pan.x / zoom);
+            vp.setAttribute('y', -pan.y / zoom);
+            vp.setAttribute('width', tw / zoom);
+            vp.setAttribute('height', th / zoom);
+        }
+
+        // ─── PAN / ZOOM ───────────────────────────────────────────────────────────────
+        function applyTransform() {
+            document.getElementById('map-transform').setAttribute('transform', `translate(${pan.x},${pan.y}) scale(${zoom})`);
+        }
+
+        function canvasMouseDown(e) {
+            if (e.target.closest('.pin-icon')) return;
+            if (pinMode) {
+                const rect = document.getElementById('canvas-wrap').getBoundingClientRect();
+                const cx = (e.clientX - rect.left - pan.x) / zoom;
+                const cy = (e.clientY - rect.top - pan.y) / zoom;
+                pendingCoord = { x: Math.round(cx), y: Math.round(cy) };
+                openSubmitForm(); return;
+            }
+            isPanning = true;
+            panStart = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+            document.getElementById('canvas-wrap').classList.add('panning');
+        }
+        function canvasMouseMove(e) {
+            if (!isPanning) return;
+            pan.x = e.clientX - panStart.x;
+            pan.y = e.clientY - panStart.y;
+            applyTransform(); updateMinimap();
+        }
+        function canvasMouseUp() {
+            isPanning = false;
+            document.getElementById('canvas-wrap').classList.remove('panning');
+        }
+        function canvasWheel(e) {
+            e.preventDefault();
+            const rect = document.getElementById('canvas-wrap').getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            const delta = e.deltaY < 0 ? 1.1 : 0.91;
+            const newZoom = Math.max(0.3, Math.min(5, zoom * delta));
+            pan.x = mx - (mx - pan.x) * (newZoom / zoom);
+            pan.y = my - (my - pan.y) * (newZoom / zoom);
+            zoom = newZoom;
+            applyTransform(); updateMinimap();
+        }
+
+        // ─── PIN MODE ─────────────────────────────────────────────────────────────────
+        function togglePinMode() {
+            pinMode = !pinMode;
+            const btn = document.getElementById('add-pin-btn');
+            btn.textContent = pinMode ? '✕ Cancel pin' : '+ Drop pin';
+            btn.classList.toggle('active', pinMode);
+            document.getElementById('canvas-wrap').classList.toggle('pinning', pinMode);
+        }
+
+        // ─── SUBMIT FORM ──────────────────────────────────────────────────────────────
+        function buildFormCatChips() {
+            const c = document.getElementById('f-cat-chips'); c.innerHTML = '';
+            Object.entries(CATS).forEach(([k, v]) => {
+                const btn = document.createElement('button');
+                btn.className = 'chip';
+                const sel = selectedCatForm === k;
+                btn.style.background = sel ? v.bg : 'transparent';
+                btn.style.color = sel ? v.text : 'var(--text-secondary)';
+                btn.style.borderColor = sel ? v.color : 'var(--border-light)';
+                btn.textContent = v.label;
+                btn.onclick = () => { selectedCatForm = k; buildFormCatChips(); };
+                c.appendChild(btn);
+            });
+        }
+
+        function openSubmitForm() {
+            buildFormCatChips();
+            document.getElementById('f-title').value = '';
+            document.getElementById('f-desc').value = '';
+            document.getElementById('submit-overlay').classList.add('open');
+        }
+
+        function overlayClickOut(e) {
+            if (e.target === document.getElementById('submit-overlay')) closeSubmitForm();
+        }
+
+        function closeSubmitForm() {
+            document.getElementById('submit-overlay').classList.remove('open');
+        }
+
+        function submitIssue() {
+            const title = document.getElementById('f-title').value.trim();
+            if (!title) { alert('Please enter a title for the issue.'); return; }
+            const issue = {
+                id: state.nextId++,
+                title,
+                desc: document.getElementById('f-desc').value.trim(),
+                category: selectedCatForm,
+                status: 'new',
+                upvotes: 0,
+                x: pendingCoord ? pendingCoord.x : Math.round(60 + Math.random() * 680),
+                y: pendingCoord ? pendingCoord.y : Math.round(40 + Math.random() * 420),
+                resources: []
+            };
+            state.issues.push(issue);
+            save(); renderAll();
+            closeSubmitForm();
+            // exit pin mode
+            pinMode = false;
+            pendingCoord = null;
+            document.getElementById('add-pin-btn').textContent = '+ Drop pin';
+            document.getElementById('add-pin-btn').classList.remove('active');
+            document.getElementById('canvas-wrap').classList.remove('pinning');
+            // open panel immediately
+            openPanel(issue.id);
+        }
+
+        // ─── SIDE PANEL ───────────────────────────────────────────────────────────────
+        function openPanel(id) {
+            const issue = state.issues.find(i => i.id === id);
+            if (!issue) return;
+            panelIssueId = id;
+            const cat = CATS[issue.category] || CATS.infrastructure;
+
+            document.getElementById('panel-cat-badge').innerHTML =
+                `<span style="background:${cat.bg};color:${cat.text};padding:2px 9px;border-radius:10px;font-size:10px;font-weight:500">${cat.label}</span>`;
+            document.getElementById('panel-title-display').textContent = issue.title || 'Untitled';
+            document.getElementById('p-title').value = issue.title || '';
+            document.getElementById('p-desc').value = issue.desc || '';
+            document.getElementById('p-upvotes').textContent = issue.upvotes;
+
+            // cat chips
+            const cc = document.getElementById('p-cat-chips'); cc.innerHTML = '';
+            Object.entries(CATS).forEach(([k, v]) => {
+                const btn = document.createElement('button'); btn.className = 'chip';
+                const sel = issue.category === k;
+                btn.style.background = sel ? v.bg : 'transparent';
+                btn.style.color = sel ? v.text : 'var(--text-secondary)';
+                btn.style.borderColor = sel ? v.color : 'var(--border-light)';
+                btn.textContent = v.label;
+                btn.onclick = () => { issue.category = k; save(); openPanel(id); renderAll(); };
+                cc.appendChild(btn);
+            });
+
+            // status chips
+            const sc = document.getElementById('p-status-chips'); sc.innerHTML = '';
+            STATUS_META.forEach(s => {
+                const btn = document.createElement('button'); btn.className = 'chip';
+                const sel = issue.status === s.k;
+                btn.style.background = sel ? s.bg : 'transparent';
+                btn.style.color = sel ? s.text : 'var(--text-secondary)';
+                btn.style.borderColor = sel ? s.border : 'var(--border-light)';
+                btn.textContent = s.l;
+                btn.onclick = () => { issue.status = s.k; save(); renderAll(); openPanel(id); };
+                sc.appendChild(btn);
+            });
+
+            // resources
+            const rr = document.getElementById('p-resources'); rr.innerHTML = '';
+            (issue.resources || []).forEach((r, i) => {
+                const div = document.createElement('div'); div.className = 'resource-item';
+                div.innerHTML = `<span>${esc(r)}</span><button class="res-rm" onclick="removeResource(${i})">✕</button>`;
+                rr.appendChild(div);
+            });
+
+            document.getElementById('side-panel').classList.add('open');
+        }
+
+        function closePanel() {
+            document.getElementById('side-panel').classList.remove('open');
+            panelIssueId = null;
+        }
+
+        function savePanel() {
+            const issue = state.issues.find(i => i.id === panelIssueId);
+            if (!issue) return;
+            issue.title = document.getElementById('p-title').value.trim() || 'Untitled';
+            issue.desc = document.getElementById('p-desc').value.trim();
+            save(); renderAll(); openPanel(panelIssueId);
+        }
+
+        function upvote() {
+            const issue = state.issues.find(i => i.id === panelIssueId);
+            if (!issue) return;
+            issue.upvotes++;
+            save(); renderAll();
+            document.getElementById('p-upvotes').textContent = issue.upvotes;
+        }
+
+        function addResource() {
+            const url = prompt('Enter a URL or description:');
+            if (!url || !url.trim()) return;
+            const issue = state.issues.find(i => i.id === panelIssueId);
+            if (issue) {
+                if (!issue.resources) issue.resources = [];
+                issue.resources.push(url.trim());
+                save(); openPanel(panelIssueId);
+            }
+        }
+
+        function removeResource(idx) {
+            const issue = state.issues.find(i => i.id === panelIssueId);
+            if (issue) { issue.resources.splice(idx, 1); save(); openPanel(panelIssueId); }
+        }
+
+        // ─── VIEW SWITCH ──────────────────────────────────────────────────────────────
+        function switchView(v) {
+            document.getElementById('map-view').classList.toggle('active', v === 'map');
+            document.getElementById('kanban-view').classList.toggle('active', v === 'kanban');
+            document.getElementById('btn-map').classList.toggle('active', v === 'map');
+            document.getElementById('btn-kanban').classList.toggle('active', v === 'kanban');
+        }
+
+        // ─── RENDER ALL ───────────────────────────────────────────────────────────────
+        function renderAll() { renderPins(); renderKanban(); updateMetrics(); updateMinimap(); }
+
+        // ─── SEED DATA ────────────────────────────────────────────────────────────────
+        function seed() {
+            if (state.issues.length) return;
+            const seeds = [
+                { title: 'Waterlogging near market', desc: 'Street floods every monsoon season. Affects 200+ vendors and commuters daily.', category: 'sanitation', status: 'new', upvotes: 47, x: 480, y: 310, resources: ['https://example.com/report/12'] },
+                { title: 'Broken streetlight MG Rd', desc: 'Three consecutive lamps non-functional. Road unsafe after 8pm.', category: 'safety', status: 'inprogress', upvotes: 23, x: 210, y: 140, resources: [] },
+                { title: 'Pothole on Nehru Avenue', desc: 'Large pothole causing accidents. Two motorcycles damaged this week.', category: 'infrastructure', status: 'new', upvotes: 31, x: 130, y: 290, resources: [] },
+                { title: 'Park encroachment', desc: 'Illegal construction eating into public park land. Approx 40sqm lost.', category: 'greenery', status: 'new', upvotes: 15, x: 600, y: 380, resources: [] },
+                { title: 'Garbage bin overflow D-12', desc: 'Collection frequency insufficient. Bin overflows every 2 days.', category: 'sanitation', status: 'resolved', upvotes: 8, x: 350, y: 430, resources: [] },
+                { title: 'Cracked footpath sector 4', desc: 'Accessible path needed for wheelchair users. Current state is hazardous.', category: 'infrastructure', status: 'inprogress', upvotes: 12, x: 70, y: 200, resources: [] },
+                { title: 'Illegal dumping north lot', desc: 'Construction debris illegally dumped on public land.', category: 'sanitation', status: 'new', upvotes: 19, x: 90, y: 60, resources: [] },
+                { title: 'Fallen tree blocks road', desc: 'Large tree fell blocking entire lane after last storm.', category: 'greenery', status: 'resolved', upvotes: 5, x: 660, y: 80, resources: [] }
+            ];
+            seeds.forEach(s => state.issues.push({ id: state.nextId++, ...s }));
+            save();
+        }
+
+        // ─── INIT ─────────────────────────────────────────────────────────────────────
+        buildCityBase();
+        seed();
+        renderAll();
+
+        // Center the map
+        const wrap = document.getElementById('canvas-wrap');
+        pan.x = wrap.offsetWidth / 2 - MAP_W / 2;
+        pan.y = wrap.offsetHeight / 2 - MAP_H / 2;
+        applyTransform();
+        updateMinimap();
+    </script>
+</body>
+
+</html>
